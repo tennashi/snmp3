@@ -26,6 +26,8 @@ type ScopedPDU struct {
 	ContextEngineID EngineID
 	ContextName     []byte
 	Data            interface{}
+
+	typ PDUType
 }
 
 func (s *ScopedPDU) Unmarshal(d []byte) error {
@@ -53,14 +55,13 @@ func (s *ScopedPDU) Unmarshal(d []byte) error {
 	if raw.Data.Tag == int(PDUTypeGetBulkRequest) {
 		pdu = &BulkPDU{}
 	} else {
-		pdu = &PDU{
-			pduType: PDUType(raw.Data.Tag),
-		}
+		pdu = &PDU{}
 	}
 	if err := pdu.Unmarshal(raw.Data.FullBytes); err != nil {
 		return err
 	}
 
+	s.typ = PDUType(raw.Data.Tag)
 	s.ContextEngineID = engineID
 	s.ContextName = raw.ContextName
 	s.Data = pdu
@@ -72,8 +73,6 @@ type PDU struct {
 	ErrorStatus      ErrorStatus
 	ErrorIndex       int32
 	VariableBindings []VarBind
-
-	pduType PDUType
 }
 
 func (p *PDU) Unmarshal(b []byte) error {
