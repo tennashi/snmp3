@@ -55,7 +55,9 @@ func (s *ScopedPDU) Unmarshal(d []byte) error {
 	if raw.Data.Tag == int(PDUTypeGetBulkRequest) {
 		pdu = &BulkPDU{}
 	} else {
-		pdu = &PDU{}
+		pdu = &PDU{
+			typ: PDUType(raw.Data.Tag),
+		}
 	}
 	if err := pdu.Unmarshal(raw.Data.FullBytes); err != nil {
 		return err
@@ -73,6 +75,8 @@ type PDU struct {
 	ErrorStatus      ErrorStatus
 	ErrorIndex       int32
 	VariableBindings []VarBind
+
+	typ PDUType
 }
 
 func (p *PDU) Unmarshal(b []byte) error {
@@ -82,7 +86,7 @@ func (p *PDU) Unmarshal(b []byte) error {
 		ErrIdx           int
 		VariableBindings []asn1.RawValue
 	}{}
-	if _, err := asn1.UnmarshalWithParams(b, &raw, fmt.Sprintf("tag:%d", p.pduType)); err != nil {
+	if _, err := asn1.UnmarshalWithParams(b, &raw, fmt.Sprintf("tag:%d", p.typ)); err != nil {
 		return err
 	}
 
