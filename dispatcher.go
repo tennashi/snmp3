@@ -50,7 +50,7 @@ func (d *Dispatcher) Listen(ctx context.Context, c net.PacketConn) error {
 			}
 			switch pdu.typ {
 			case PDUTypeSNMPV2Trap:
-				pduData, ok := pdu.Data.(PDU)
+				pduData, ok := pdu.Data.(*PDU)
 				if !ok {
 					// TODO: impl
 				}
