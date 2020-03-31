@@ -120,7 +120,7 @@ type BulkPDU struct {
 	MaxRepetitions   int32
 	VariableBindings []VarBind
 
-	pduType PDUType
+	typ PDUType
 }
 
 func (p *BulkPDU) Unmarshal(b []byte) error {
@@ -130,7 +130,7 @@ func (p *BulkPDU) Unmarshal(b []byte) error {
 		MaxRepetitions   int
 		VariableBindings []asn1.RawValue
 	}{}
-	if _, err := asn1.UnmarshalWithParams(b, &raw, fmt.Sprintf("tag:%d", p.pduType)); err != nil {
+	if _, err := asn1.UnmarshalWithParams(b, &raw, fmt.Sprintf("tag:%d", p.typ)); err != nil {
 		return err
 	}
 
