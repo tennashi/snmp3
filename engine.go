@@ -32,6 +32,10 @@ func NewEngine(lcd LocalConfigurationDatastore) *Engine {
 	return &Engine{d: d}
 }
 
+func (e *Engine) RegisterNotificationReceiver(r NotificationReceiver) {
+	e.d.notificationReceiver = r
+}
+
 func (e *Engine) Serve(ctx context.Context, conn net.PacketConn) error {
 	return e.d.Listen(ctx, conn)
 }

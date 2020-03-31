@@ -10,6 +10,8 @@ import (
 type Dispatcher struct {
 	MaxRecvSize int64
 	mpm         *MessageProcessingModel
+
+	notificationReceiver NotificationReceiver
 }
 
 func NewDispatcher(mpm *MessageProcessingModel) *Dispatcher {
@@ -46,8 +48,14 @@ func (d *Dispatcher) Listen(ctx context.Context, c net.PacketConn) error {
 				fmt.Println(err)
 				return
 			}
-			fmt.Println(pdu)
-			fmt.Println(pdu.Data)
+			switch pdu.typ {
+			case PDUTypeSNMPV2Trap:
+				pduData, ok := pdu.Data.(PDU)
+				if !ok {
+					// TODO: impl
+				}
+				d.notificationReceiver.ProcessPDU(context.Background(), pduData)
+			}
 		}()
 	}
 }
