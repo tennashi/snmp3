@@ -144,7 +144,7 @@ func (p *BulkPDU) Unmarshal(b []byte) error {
 		return errors.New("invalid max repetitions")
 	}
 
-	varBinds := make([]VarBind, len(raw.VariableBindings))
+	varBinds := make(VarBinds, len(raw.VariableBindings))
 	for i, rawVarBind := range raw.VariableBindings {
 		if err := varBinds[i].Unmarshal(rawVarBind.FullBytes); err != nil {
 			return err
@@ -154,6 +154,17 @@ func (p *BulkPDU) Unmarshal(b []byte) error {
 	p.RequestID = int32(raw.ReqID)
 	p.NonRepeaters = int32(raw.NonRepeaters)
 	p.MaxRepetitions = int32(raw.MaxRepetitions)
+	return nil
+}
+
+type VarBinds []VarBind
+
+func (v VarBinds) Get(key asn1.ObjectIdentifier) interface{} {
+	for _, vb := range v {
+		if vb.Name.Equal(key) {
+			return vb.Value
+		}
+	}
 	return nil
 }
 
