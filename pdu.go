@@ -74,7 +74,7 @@ type PDU struct {
 	RequestID        int32
 	ErrorStatus      ErrorStatus
 	ErrorIndex       int32
-	VariableBindings []VarBind
+	VariableBindings VarBinds
 
 	typ PDUType
 }
@@ -100,7 +100,7 @@ func (p *PDU) Unmarshal(b []byte) error {
 		return errors.New("invalid error index")
 	}
 
-	varBinds := make([]VarBind, len(raw.VariableBindings))
+	varBinds := make(VarBinds, len(raw.VariableBindings))
 	for i, rawVarBind := range raw.VariableBindings {
 		if err := varBinds[i].Unmarshal(rawVarBind.FullBytes); err != nil {
 			return err
@@ -118,7 +118,7 @@ type BulkPDU struct {
 	RequestID        int32
 	NonRepeaters     int32
 	MaxRepetitions   int32
-	VariableBindings []VarBind
+	VariableBindings VarBinds
 
 	typ PDUType
 }
