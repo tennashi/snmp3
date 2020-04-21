@@ -42,6 +42,13 @@ type USMUserEntry struct {
 	Name     string
 }
 
+type USMTimeEntry struct {
+	EngineID       EngineID
+	Boot           int32
+	Time           int32
+	LatestReceived int32
+}
+
 type UserSecurityModel struct {
 	lcd LocalConfigurationDatastore
 }
@@ -92,7 +99,7 @@ func (u *UserSecurityModel) ProcessIncomingMsg(p Packet) ([]byte, error) {
 
 const mega = 1 << 20
 
-func passwordToKey(password string, engineID []byte) []byte {
+func PasswordToKey(password string, engineID []byte) []byte {
 	h := sha1.New()
 	p := []byte(password)
 	plen := len(p)
@@ -119,7 +126,7 @@ type securityContext struct {
 }
 
 func (c *securityContext) authenticateIncomingMsg(authParameters, wholeMsg []byte) ([]byte, error) {
-	key := passwordToKey(string(c.user.AuthKey), c.user.EngineID)
+	key := c.user.AuthKey
 
 	mac := hmac.New(sha1.New, key)
 	data := bytes.Replace(wholeMsg, authParameters, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 1)
@@ -140,7 +147,7 @@ func (c securityContext) generateInitializationVector(privParams []byte) []byte 
 }
 
 func (c *securityContext) decryptData(privParams, encryptedData []byte) ([]byte, error) {
-	key := passwordToKey(string(c.user.PrivKey), c.user.EngineID)[:16]
+	key := c.user.PrivKey[:16]
 
 	a, err := aes.NewCipher(key)
 	if err != nil {
