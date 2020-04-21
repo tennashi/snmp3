@@ -2,6 +2,7 @@ package snmp3
 
 import (
 	"context"
+	"encoding/asn1"
 	"errors"
 	"fmt"
 	"net"
@@ -61,10 +62,17 @@ func (d *Dispatcher) Listen(ctx context.Context, c net.PacketConn) error {
 }
 
 func checkVersion(data []byte) error {
-	if len(data) < 6 {
-		return errors.New("invalid SNMP packet")
+	var whole asn1.RawValue
+	if _, err := asn1.Unmarshal(data, &whole); err != nil {
+		return err
 	}
-	if data[5] != 3 {
+
+	var version int
+	if _, err := asn1.Unmarshal(whole.Bytes, &version); err != nil {
+		return err
+	}
+
+	if version != 3 {
 		return errors.New("this SNMP version is not implemented")
 	}
 	return nil
