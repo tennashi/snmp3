@@ -25,7 +25,7 @@ const (
 type ScopedPDU struct {
 	ContextEngineID EngineID
 	ContextName     []byte
-	Data            interface{}
+	Data            PDU
 
 	typ PDUType
 }
@@ -49,15 +49,8 @@ func (s *ScopedPDU) Unmarshal(d []byte) error {
 		return errors.New("unknown PDU type")
 	}
 
-	var pdu interface {
-		Unmarshal(d []byte) error
-	}
-	if raw.Data.Tag == int(PDUTypeGetBulkRequest) {
-		pdu = &BulkPDU{}
-	} else {
-		pdu = &PDU{
-			typ: PDUType(raw.Data.Tag),
-		}
+	pdu := PDU{
+		typ: PDUType(raw.Data.Tag),
 	}
 	if err := pdu.Unmarshal(raw.Data.FullBytes); err != nil {
 		return err

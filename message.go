@@ -4,15 +4,18 @@ import (
 	"encoding/asn1"
 	"errors"
 	"math"
+	"net"
 )
 
 type Packet struct {
+	RemoteAddr         net.Addr
 	Version            int32
 	GlobalData         Header
 	SecurityParameters SecurityParameters
-	Data               []byte
+	Data               ScopedPDU
 
 	wholeBytes []byte
+	rawData    []byte
 }
 
 func (p *Packet) Unmarshal(d []byte) error {
@@ -40,12 +43,32 @@ func (p *Packet) Unmarshal(d []byte) error {
 	}
 
 	p.Version = int32(raw.Version)
+
 	if raw.Data.Class == asn1.ClassUniversal && raw.Data.Tag == asn1.TagOctetString {
-		p.Data = raw.Data.Bytes
+		p.rawData = raw.Data.Bytes
 		return nil
 	}
-	p.Data = raw.Data.FullBytes
+	p.rawData = raw.Data.FullBytes
 	return nil
+}
+
+type MessageFlag byte
+
+const (
+	MessageFlagAuth MessageFlag = 1 << iota
+	MessageFlagPriv
+	MessageFlagReportable
+)
+
+func NewMessageFlag(f []byte) (MessageFlag, error) {
+	if len(f) == 0 {
+		return 0, errors.New("invalid message flag")
+	}
+	msgFlag := MessageFlag(f[0])
+	if msgFlag&^MessageFlagReportable == MessageFlagPriv {
+		return 0, errors.New("invalid message flag")
+	}
+	return msgFlag, nil
 }
 
 type Header struct {
