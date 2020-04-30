@@ -12,7 +12,7 @@ func NewMessageProcessingModel(usm *UserSecurityModel) *MessageProcessingModel {
 	return &MessageProcessingModel{usm: usm}
 }
 
-func (m *MessageProcessingModel) PrepareDataElements(data []byte) (*ScopedPDU, error) {
+func (m *MessageProcessingModel) PrepareDataElements(data []byte) (*Packet, error) {
 	p := Packet{}
 	if err := p.Unmarshal(data); err != nil {
 		return nil, err
@@ -27,9 +27,9 @@ func (m *MessageProcessingModel) PrepareDataElements(data []byte) (*ScopedPDU, e
 	if err != nil {
 		return nil, err
 	}
-	pdu := ScopedPDU{}
-	if err := pdu.Unmarshal(rawPDU); err != nil {
+	p.Data = ScopedPDU{}
+	if err := p.Data.Unmarshal(rawPDU); err != nil {
 		return nil, err
 	}
-	return &pdu, nil
+	return &p, nil
 }

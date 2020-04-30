@@ -4,12 +4,18 @@ import "errors"
 
 type LocalConfigurationDatastore interface {
 	USMUserTable
+	USMTimeTable
 }
 
 type USMUserTable interface {
-	AddUser([]byte, USMUserEntry) error
-	GetUser([]byte) (*USMUserEntry, error)
-	DeleteUser([]byte) error
+	AddUser(e USMUserEntry) error
+	GetUser(engineID EngineID, userName string) (*USMUserEntry, error)
+	DeleteUser(engineID EngineID, userName string) error
+}
+
+type USMTimeTable interface {
+	AddTime(EngineID, USMTimeEntry) error
+	GetTime(EngineID) (*USMTimeEntry, error)
 }
 
 var GenerateUSMUserKey func(SecurityParameters) []byte = generateUSMUserKey

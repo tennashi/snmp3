@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/asn1"
 	"errors"
-	"fmt"
 	"net"
+	"time"
 )
 
 type Dispatcher struct {
@@ -26,39 +26,56 @@ const defaultMaxRecvSize = 2 * 1 << 10
 
 func (d *Dispatcher) Listen(ctx context.Context, c net.PacketConn) error {
 	defer c.Close()
+	if d.MaxRecvSize == 0 {
+		d.MaxRecvSize = defaultMaxRecvSize
+	}
+
+	var tempDelay time.Duration
 	buf := make([]byte, d.MaxRecvSize)
 	for {
-		l, _, err := c.ReadFrom(buf)
+		l, addr, err := c.ReadFrom(buf)
 		if err != nil {
 			var ne net.Error
-			if errors.As(err, &ne) {
-				if ne.Temporary() {
-					continue
+			if errors.As(err, &ne) && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
 				}
+				logger.Println("snmp: read error: %v; retrying in %v", err, tempDelay)
+				exponentialWait(tempDelay, 1*time.Second)
+				continue
 			}
+			logger.Println(err)
 			return err
 		}
+		// Reset tempDelay
+		tempDelay = 0
 		data := make([]byte, l)
 		copy(data, buf[:l])
 		if err := checkVersion(data); err != nil {
-			return err
+			logger.Println(err)
+			continue
 		}
 		go func() {
-			pdu, err := d.mpm.PrepareDataElements(data)
+			p, err := d.mpm.PrepareDataElements(data)
 			if err != nil {
-				fmt.Println(err)
+				logger.Println(err)
 				return
 			}
-			switch pdu.typ {
+			p.RemoteAddr = addr
+			switch p.Data.typ {
 			case PDUTypeSNMPV2Trap:
-				pduData, ok := pdu.Data.(*PDU)
-				if !ok {
-					// TODO: impl
-				}
-				d.notificationReceiver.ProcessPDU(context.Background(), pduData)
+				d.notificationReceiver.ProcessPDU(context.Background(), p)
 			}
 		}()
 	}
+}
+
+func exponentialWait(delay, max time.Duration) (next time.Duration) {
+	if delay >= max {
+		delay = max
+	}
+	time.Sleep(delay)
+	return delay * 2
 }
 
 func checkVersion(data []byte) error {

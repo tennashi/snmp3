@@ -8,6 +8,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"math"
 )
 
 type SecurityModel int32
@@ -25,7 +26,7 @@ const (
 )
 
 func NewMessageFlag(f []byte) (MessageFlag, error) {
-	if len(f) < 1 {
+	if len(f) == 0 {
 		return 0, errors.New("invalid message flag")
 	}
 	msgFlag := MessageFlag(f[0])
@@ -57,44 +58,67 @@ func NewUserSecurityModel(lcd LocalConfigurationDatastore) *UserSecurityModel {
 	return &UserSecurityModel{lcd: lcd}
 }
 
-func (u *UserSecurityModel) ProcessIncomingMsg(p Packet) ([]byte, error) {
-	key := GenerateUSMUserKey(p.SecurityParameters)
-	secUser, err := u.lcd.GetUser(key)
-	if err != nil {
-		if err != ErrCachedSecurityDataNotFound {
-			return nil, err
-		}
-		c := USMUserEntry{
-			EngineID: p.SecurityParameters.AuthoritativeEngineID,
-			Name:     p.SecurityParameters.UserName,
-		}
-		if err := u.lcd.AddUser(key, c); err != nil {
-			return nil, err
-		}
+type SecurityLevel int
+
+const (
+	SecurityLevelNoAuthNoPriv SecurityLevel = iota
+	SecurityLevelAuthNoPriv
+	SecurityLevelAuthPriv
+)
+
+func NewSecurityLevel(f MessageFlag) SecurityLevel {
+	switch {
+	case f&MessageFlagAuth|MessageFlagPriv > 0:
+		return SecurityLevelAuthPriv
+	case f&MessageFlagAuth > 0:
+		return SecurityLevelAuthNoPriv
+	default:
+		return SecurityLevelNoAuthNoPriv
 	}
-	if !p.SecurityParameters.AuthoritativeEngineID.Equal(secUser.EngineID) {
+}
+
+func (u *UserSecurityModel) ProcessIncomingMsg(p Packet) ([]byte, error) {
+	if len(p.SecurityParameters.AuthoritativeEngineID) == 0 {
 		return nil, errors.New("unknown engine ID")
 	}
-	if p.SecurityParameters.UserName != secUser.Name {
-		return nil, errors.New("unknown user")
+
+	t, err := u.lcd.GetTime(p.SecurityParameters.AuthoritativeEngineID)
+	if err != nil {
+		return nil, err
+	}
+
+	secName := p.SecurityParameters.UserName
+	secLevel := NewSecurityLevel(p.GlobalData.Flags)
+
+	if secName == "" || secLevel == SecurityLevelNoAuthNoPriv {
+		return p.rawData, nil
+	}
+
+	secUser, err := u.lcd.GetUser(p.SecurityParameters.AuthoritativeEngineID, p.SecurityParameters.UserName)
+	if err != nil {
+		return nil, err
 	}
 
 	curUser := securityContext{
 		user: secUser,
+		time: t,
 	}
-	if p.GlobalData.Flags&MessageFlagAuth > 0 {
+	if secLevel >= SecurityLevelAuthNoPriv {
 		if _, err := curUser.authenticateIncomingMsg(p.SecurityParameters.AuthenticationParameters, p.wholeBytes); err != nil {
 			return nil, err
 		}
-	}
-	if p.GlobalData.Flags&MessageFlagPriv > 0 {
-		plainData, err := curUser.decryptData(p.SecurityParameters.PrivacyParameters, p.Data)
-		if err != nil {
+		if err := curUser.checkTime(p.SecurityParameters.AuthoritativeEngineBoots, p.SecurityParameters.AuthoritativeEngineTime); err != nil {
 			return nil, err
 		}
-		return plainData, nil
+		// TODO: save time entry
 	}
-	return p.Data, nil
+
+	plainData, err := curUser.decryptData(p.SecurityParameters.PrivacyParameters, p.rawData)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: compute max size
+	return plainData, nil
 }
 
 const mega = 1 << 20
@@ -120,15 +144,12 @@ func PasswordToKey(password string, engineID []byte) []byte {
 }
 
 type securityContext struct {
-	user        *USMUserEntry
-	engineBoots int32
-	engineTime  int32
+	user *USMUserEntry
+	time *USMTimeEntry
 }
 
 func (c *securityContext) authenticateIncomingMsg(authParameters, wholeMsg []byte) ([]byte, error) {
-	key := c.user.AuthKey
-
-	mac := hmac.New(sha1.New, key)
+	mac := hmac.New(sha1.New, c.user.AuthKey)
 	data := bytes.Replace(wholeMsg, authParameters, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 1)
 	mac.Write(data)
 	dd := mac.Sum(nil)[:12]
@@ -140,8 +161,8 @@ func (c *securityContext) authenticateIncomingMsg(authParameters, wholeMsg []byt
 
 func (c securityContext) generateInitializationVector(privParams []byte) []byte {
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, c.engineBoots)
-	binary.Write(&buf, binary.BigEndian, c.engineTime)
+	binary.Write(&buf, binary.BigEndian, c.time.Boot)
+	binary.Write(&buf, binary.BigEndian, c.time.Time)
 	iv := append(buf.Bytes(), privParams...)
 	return iv
 }
@@ -160,4 +181,15 @@ func (c *securityContext) decryptData(privParams, encryptedData []byte) ([]byte,
 	m := cipher.NewCFBDecrypter(a, iv)
 	m.XORKeyStream(data, encryptedData)
 	return data, nil
+}
+
+func (c securityContext) checkTime(b int32, t int32) error {
+	if c.time == nil {
+		return errors.New("unknown engine ID")
+	}
+
+	if c.time.Boot > b || c.time.Boot == b && c.time.LatestReceived-150 > t || c.time.Boot == math.MaxInt32 {
+		return errors.New("not in time window")
+	}
+	return nil
 }
