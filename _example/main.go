@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/tennashi/snmp3"
@@ -14,23 +15,46 @@ func main() {
 		panic(err)
 	}
 	ctx := context.Background()
+	r := &receiver{}
+	e.RegisterNotificationReceiver(r)
 	e.Serve(ctx, ln)
+}
+
+type receiver struct{}
+
+func (r *receiver) ProcessPDU(ctx context.Context, p *snmp3.Packet) error {
+	fmt.Println(p)
+	return nil
 }
 
 type lcd struct{}
 
-func (_ lcd) AddUser([]byte, snmp3.USMUserEntry) error {
+func (_ lcd) AddUser(snmp3.USMUserEntry) error {
 	return nil
 }
 
-func (_ lcd) GetUser([]byte) (*snmp3.USMUserEntry, error) {
+func (_ lcd) GetUser(engineID snmp3.EngineID, userName string) (*snmp3.USMUserEntry, error) {
 	return &snmp3.USMUserEntry{
-		Name:     "hoge",
-		EngineID: snmp3.EngineID([]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1}),
-		AuthKey:  []byte("hogehoge"),
-		PrivKey:  []byte("fugafuga")}, nil
+		Name:     userName,
+		EngineID: engineID,
+		AuthKey:  snmp3.PasswordToKey("hogehoge", engineID),
+		PrivKey:  snmp3.PasswordToKey("fugafuga", engineID),
+	}, nil
 }
 
-func (_ lcd) DeleteUser([]byte) error {
+func (_ lcd) DeleteUser(snmp3.EngineID, string) error {
 	return nil
+}
+
+func (_ lcd) AddTime(snmp3.EngineID, snmp3.USMTimeEntry) error {
+	return nil
+}
+
+func (_ lcd) GetTime(engineID snmp3.EngineID) (*snmp3.USMTimeEntry, error) {
+	return &snmp3.USMTimeEntry{
+		EngineID:       engineID,
+		Boot:           0,
+		Time:           0,
+		LatestReceived: 0,
+	}, nil
 }
