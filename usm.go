@@ -17,25 +17,6 @@ const (
 	SecurityModelUSM SecurityModel = 3
 )
 
-type MessageFlag byte
-
-const (
-	MessageFlagAuth MessageFlag = 1 << iota
-	MessageFlagPriv
-	MessageFlagReportable
-)
-
-func NewMessageFlag(f []byte) (MessageFlag, error) {
-	if len(f) == 0 {
-		return 0, errors.New("invalid message flag")
-	}
-	msgFlag := MessageFlag(f[0])
-	if msgFlag&^MessageFlagReportable == MessageFlagPriv {
-		return 0, errors.New("invalid message flag")
-	}
-	return msgFlag, nil
-}
-
 type USMUserEntry struct {
 	AuthKey  []byte
 	PrivKey  []byte
@@ -67,10 +48,11 @@ const (
 )
 
 func NewSecurityLevel(f MessageFlag) SecurityLevel {
+	secFlags := f & (MessageFlagAuth | MessageFlagPriv)
 	switch {
-	case f&MessageFlagAuth|MessageFlagPriv > 0:
+	case secFlags^(MessageFlagAuth|MessageFlagPriv) == 0:
 		return SecurityLevelAuthPriv
-	case f&MessageFlagAuth > 0:
+	case secFlags^MessageFlagAuth == 0:
 		return SecurityLevelAuthNoPriv
 	default:
 		return SecurityLevelNoAuthNoPriv
@@ -112,13 +94,15 @@ func (u *UserSecurityModel) ProcessIncomingMsg(p Packet) ([]byte, error) {
 		}
 		// TODO: save time entry
 	}
-
-	plainData, err := curUser.decryptData(p.SecurityParameters.PrivacyParameters, p.rawData)
-	if err != nil {
-		return nil, err
+	if secLevel == SecurityLevelAuthPriv {
+		plainData, err := curUser.decryptData(p.SecurityParameters.PrivacyParameters, p.rawData)
+		if err != nil {
+			return nil, err
+		}
+		// TODO: compute max size
+		return plainData, nil
 	}
-	// TODO: compute max size
-	return plainData, nil
+	return p.rawData, nil
 }
 
 const mega = 1 << 20

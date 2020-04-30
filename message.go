@@ -52,6 +52,25 @@ func (p *Packet) Unmarshal(d []byte) error {
 	return nil
 }
 
+type MessageFlag byte
+
+const (
+	MessageFlagAuth MessageFlag = 1 << iota
+	MessageFlagPriv
+	MessageFlagReportable
+)
+
+func NewMessageFlag(f []byte) (MessageFlag, error) {
+	if len(f) == 0 {
+		return 0, errors.New("invalid message flag")
+	}
+	msgFlag := MessageFlag(f[0])
+	if msgFlag&^MessageFlagReportable == MessageFlagPriv {
+		return 0, errors.New("invalid message flag")
+	}
+	return msgFlag, nil
+}
+
 type Header struct {
 	ID            int32
 	MaxSize       int32
